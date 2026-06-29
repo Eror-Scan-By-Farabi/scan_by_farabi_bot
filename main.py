@@ -27,6 +27,17 @@ def save_db(db_data):
     with open(DB_FILE, "w") as f:
         json.dump(db_data, f, indent=4)
 
+# শেয়ার লিঙ্ককে আসল প্রোফাইল লিঙ্কে রূপান্তর করার ফাংশন
+def fix_fb_url(url):
+    if "facebook.com/share" in url:
+        try:
+            # শেয়ার লিঙ্কের রিডাইরেক্ট ফলো করে আসল লিঙ্ক বের করা
+            response = requests.get(url, allow_redirects=True, timeout=10)
+            return response.url
+        except Exception:
+            return url
+    return url
+
 # ==========================================
 # ২. মূল লজিক এবং ফেসবুক ইনফো প্রসেসিং
 # ==========================================
@@ -35,12 +46,17 @@ def handle_all_messages(message):
     text = message.text.strip()
     
     fb_url = ""
+    # একই লাইন অথবা নতুন লাইনে লিঙ্ক থাকলে সেটা খুঁজে বের করা
     if text.startswith("/info") or text.lower().startswith("info"):
-        parts = text.split(" ")
+        parts = text.split()
         if len(parts) >= 2:
             fb_url = parts[1]
     elif "facebook.com" in text:
-        fb_url = text
+        # যদি সরাসরি শুধু লিঙ্ক পেস্ট করে দেওয়া হয়
+        for word in text.split():
+            if "facebook.com" in word:
+                fb_url = word
+                break
 
     if not fb_url or "facebook.com" not in fb_url:
         if message.chat.type == "private" or text.startswith("/start"):
@@ -60,8 +76,11 @@ def handle_all_messages(message):
     wait_msg = bot.reply_to(message, "⏳ **™√Bπother's ™ Limited** আপনার ডেটা প্রসেস করছে... দয়া করে অপেক্ষা করুন।", parse_mode="Markdown")
 
     try:
+        # শেয়ার লিঙ্ক ফিক্স করা
+        final_url = fix_fb_url(fb_url)
+
         api_url = "https://id.traodoisub.com/api.php"
-        response = requests.post(api_url, data={"link": fb_url}, timeout=15)
+        response = requests.post(api_url, data={"link": final_url}, timeout=15)
         
         uid = "Ẩn"
         name = "Adidaya Adi"
@@ -78,10 +97,10 @@ def handle_all_messages(message):
                 pass
 
         try:
-            if "profile.php?id=" in fb_url:
-                username = fb_url.split("id=")[1].split("&")[0]
+            if "profile.php?id=" in final_url:
+                username = final_url.split("id=")[1].split("&")[0]
             else:
-                username = fb_url.split("facebook.com/")[1].split("/")[0].split("?")[0]
+                username = final_url.split("facebook.com/")[1].split("/")[0].split("?")[0]
         except Exception:
             username = "Not_Found"
 
@@ -121,11 +140,18 @@ def handle_all_messages(message):
             f"⚡ *Powered by: ™√Bπother's ™ Limited ™*"
         )
 
-        bot.delete_message(message.chat.id, wait_msg.message_id)
+        try:
+            bot.delete_message(message.chat.id, wait_msg.message_id)
+        except Exception:
+            pass
+            
         bot.send_message(message.chat.id, response_text, parse_mode="Markdown")
 
     except Exception as e:
-        bot.edit_message_text(f"❌ একটি ত্রুটি ঘটেছে বা সার্ভার ডাউন। আবার চেষ্টা করুন।", message.chat.id, wait_msg.message_id)
+        try:
+            bot.edit_message_text(f"❌ একটি ত্রুটি ঘটেছে বা সার্ভার ডাউন। আবার চেষ্টা করুন।", message.chat.id, wait_msg.message_id)
+        except Exception:
+            bot.send_message(message.chat.id, f"❌ একটি ত্রুটি ঘটেছে বা সার্ভার ডাউন। আবার চেষ্টা করুন।")
 
 if __name__ == "__main__":
     bot.polling(none_stop=True)
